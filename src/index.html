@@ -11,24 +11,41 @@
 </div>
 <div class="container">
     <h1>Unmerge Customer Events</h1>
-    <div class="card">
-        <h2><i class="fas fa-cogs"></i> Configuration</h2>
-        <div>
-            <label for="customer-email">Customer Email:</label>
-            <input type="text" id="customer-email" value="sample@example.com">
-        </div>
-        <div>
-            <label for="event-mapping">Event Identification Mapping:</label>
-            <textarea id="event-mapping" rows="6">
+    <div class="card-container">
+        <div class="card">
+            <h2><i class="fas fa-cogs"></i> Configuration</h2>
+            <div>
+                <label for="customer-email">Customer Email:</label>
+                <input type="text" id="customer-email" value="sample@example.com">
+            </div>
+            <div>
+                <label for="event-mapping">Event Identification Mapping:</label>
+                <textarea id="event-mapping" rows="6">
 {
     "consent": ["contact_channel_value", "identification"],
     "campaign": ["message_id", "recipient", "sender"],
     "double_opt_in": ["email"],
     "newsletter_subscribe": ["email"]
 }
-            </textarea>
+                </textarea>
+            </div>
+            <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter Customer Events</button>
         </div>
-        <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter Customer Events</button>
+        <div class="card storage-card">
+            <h2><i class="fas fa-folder"></i> Stored Filtered Emails</h2>
+            <table id="storage-table">
+                <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Events</th>
+                    <th>Download</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+                <tbody id="storage-tbody">
+                </tbody>
+            </table>
+        </div>
     </div>
     <div class="card results-card">
         <div id="loader" class="loader" style="display: none;"></div>
@@ -299,12 +316,60 @@
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
 
+        // Save to local storage
+        localStorage.setItem(filename, jsonStr);
+        populateStorageTable();
+
         const downloadLink = document.getElementById('download-link');
         downloadLink.href = url;
         downloadLink.download = filename;
         downloadLink.style.display = 'block';
         downloadLink.textContent = 'Download Filtered JSON';
     }
+
+    function populateStorageTable() {
+        const storageTbody = document.getElementById('storage-tbody');
+        storageTbody.innerHTML = '';
+
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.endsWith('.json')) {
+                const email = key.split('_')[0].replace(/_/g, '@');
+                const eventCount = JSON.parse(localStorage.getItem(key)).events.length;
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(new Blob([localStorage.getItem(key)], { type: 'application/json' }));
+                downloadLink.download = key;
+                downloadLink.textContent = key;
+
+                const removeButton = document.createElement('button');
+                removeButton.innerHTML = '<i class="fas fa-times"></i>';
+                removeButton.onclick = () => {
+                    localStorage.removeItem(key);
+                    populateStorageTable();
+                };
+
+                const row = document.createElement('tr');
+                const emailCell = document.createElement('td');
+                emailCell.textContent = email;
+                const eventCountCell = document.createElement('td');
+                eventCountCell.textContent = eventCount;
+                const downloadCell = document.createElement('td');
+                downloadCell.appendChild(downloadLink);
+                const removeCell = document.createElement('td');
+                removeCell.appendChild(removeButton);
+
+                row.appendChild(emailCell);
+                row.appendChild(eventCountCell);
+                row.appendChild(downloadCell);
+                row.appendChild(removeCell);
+                storageTbody.appendChild(row);
+            }
+        }
+    }
+
+    // Populate the storage table on page load
+    document.addEventListener('DOMContentLoaded', populateStorageTable);
 </script>
 </body>
 </html>
