@@ -41,5 +41,6 @@ node server.js
 
 ## Usage
 
+1. Run the server.
 1. Open `index.html` in your web browser.
-2. Click the "Unmerge Customer" button to fetch and display the events
+2. Click the " Export & Filter Customer Events" button to fetch and display the events
