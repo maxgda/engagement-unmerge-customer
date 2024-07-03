@@ -1,7 +1,3 @@
-Sure, let's streamline the README to cover essential details without too much code.
-
-### README.md
-
 # Engagement Event Unmerge Tool
 
 This project provides a web interface to unmerge customer events from Exponea
