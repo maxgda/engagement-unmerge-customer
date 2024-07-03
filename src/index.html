@@ -30,6 +30,8 @@
                 </textarea>
             </div>
             <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter Customer Events</button>
+            <button class="anonymise"><i class="fas fa-user-secret"></i> Anonymise</button>
+            <button><i class="fas fa-chart-line"></i> Track</button>
         </div>
         <div class="card storage-card">
             <h2><i class="fas fa-folder"></i> Stored Filtered Emails</h2>
@@ -210,7 +212,7 @@
                 ? filterEventsByCustomerID(events.filter(event => event.type === eventType), document.getElementById('customer-email').value, JSON.parse(document.getElementById('event-mapping').value)).length
                 : events.filter(event => event.type === eventType).length;
             const tab = document.createElement('div');
-            tab.className = 'tab';
+            tab.className = `tab ${prefix}-tab`;
             tab.id = `tab-${prefix}-${eventType}`;
             tab.textContent = `${eventType} (${eventCount})`;
             tab.onclick = () => showTab(prefix, eventType);
@@ -342,6 +344,13 @@
                 downloadLink.download = key;
                 downloadLink.textContent = key;
 
+                const viewButton = document.createElement('button');
+                viewButton.textContent = 'View';
+                viewButton.onclick = () => {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    loadStoredData(data);
+                };
+
                 const removeButton = document.createElement('button');
                 removeButton.innerHTML = '<i class="fas fa-times"></i>';
                 removeButton.onclick = () => {
@@ -356,15 +365,65 @@
                 eventCountCell.textContent = eventCount;
                 const downloadCell = document.createElement('td');
                 downloadCell.appendChild(downloadLink);
-                const removeCell = document.createElement('td');
-                removeCell.appendChild(removeButton);
+                const actionCell = document.createElement('td');
+                actionCell.appendChild(viewButton);
+                actionCell.appendChild(removeButton);
 
                 row.appendChild(emailCell);
                 row.appendChild(eventCountCell);
                 row.appendChild(downloadCell);
-                row.appendChild(removeCell);
+                row.appendChild(actionCell);
                 storageTbody.appendChild(row);
             }
+        }
+    }
+
+    async function loadStoredData(data) {
+        clearResults();
+
+        const customerEmail = data.ids.email;
+        document.getElementById('customer-email').value = customerEmail;
+
+        displayCustomerDetails(data.ids);
+
+        const exponea = new Exponea('http://localhost:3000/exponea');
+        const exportRequestProps = {
+            "customer_id": { "email": customerEmail }
+        };
+
+        try {
+            const customer = await exponea.exportCustomer(exportRequestProps.customer_id);
+            const eventTypes = [...new Set(customer.events.map(event => event.type))];
+            createTabs(eventTypes, 'original', customer.events);
+
+            let totalOriginalEvents = 0;
+            let totalFilteredEvents = 0;
+            const filteredEvents = data.events;
+
+            const filteredEventTypes = [];
+            eventTypes.forEach(eventType => {
+                const originalEvents = customer.events.filter(event => event.type === eventType);
+                totalOriginalEvents += originalEvents.length;
+                displayEventsInTable(eventType, originalEvents, 'original');
+
+                const filtered = filteredEvents.filter(event => event.type === eventType);
+                totalFilteredEvents += filtered.length;
+                if (filtered.length > 0) {
+                    filteredEventTypes.push(eventType);
+                }
+                displayEventsInTable(eventType, filtered, 'filtered');
+            });
+
+            document.getElementById('original-events-count').textContent = `(${totalOriginalEvents})`;
+            document.getElementById('filtered-events-count').textContent = `(${totalFilteredEvents})`;
+
+            if (filteredEventTypes.length > 0) {
+                createTabs(filteredEventTypes, 'filtered', data.events, true);
+                document.getElementById(`original-${eventTypes[0]}`).style.display = 'block';
+                document.getElementById(`tab-original-${eventTypes[0]}`).classList.add('active');
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
         }
     }
 
