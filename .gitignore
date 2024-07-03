@@ -1,0 +1,57 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variables file
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Swagger generated files
+swagger/swagger.yaml
+swagger/swagger.json
+
+# Mac system files
+.DS_Store
+
+# IDE directories
+.idea/
+.vscode/
+*.swp
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Typescript v1 declaration files
+typings/
+
+# API response files
+api_response.json
+
+# Temporary files
+*.tmp
+*.temp
