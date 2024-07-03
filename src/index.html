@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Unmerge Customer</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+<div class="logo-container">
+    <img src="bloomreach-white.svg" alt="Bloomreach Logo" class="logo">
+</div>
+<div class="container">
+    <h1>Unmerge Customer Events</h1>
+    <div class="card">
+        <h2><i class="fas fa-cogs"></i> Configuration</h2>
+        <div>
+            <label for="customer-email">Customer Email:</label>
+            <input type="text" id="customer-email" value="sample@example.com">
+        </div>
+        <div>
+            <label for="event-mapping">Event Identification Mapping:</label>
+            <textarea id="event-mapping" rows="6">
+{
+    "consent": ["contact_channel_value", "identification"],
+    "campaign": ["message_id", "recipient", "sender"],
+    "double_opt_in": ["email"],
+    "newsletter_subscribe": ["email"]
+}
+            </textarea>
+        </div>
+        <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter Customer Events</button>
+    </div>
+    <div class="card results-card">
+        <div id="loader" class="loader" style="display: none;"></div>
+        <div class="results-content">
+            <h2><i class="fas fa-list"></i> Results</h2>
+            <div id="customer-details" class="customer-details"></div>
+            <h2>Original Events <span id="original-events-count"></span></h2>
+            <div id="original-tab-container" class="tab-container"></div>
+            <div id="original-table-container"></div>
+            <h2>Filtered Events <span id="filtered-events-count"></span></h2>
+            <div id="filtered-tab-container" class="tab-container"></div>
+            <div id="filtered-table-container"></div>
+            <a id="download-link" style="display: none;">Download Filtered JSON</a>
+        </div>
+    </div>
+</div>
+<script>
+    class Exponea {
+        constructor(apiUrl) {
+            this.apiUrl = apiUrl;
+        }
+
+        async sendRequest(method, apiType, pathName, body) {
+            const url = `${this.apiUrl}/${apiType}/${pathName}`;
+            console.log("URL:", url);
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(body)
+                });
+                const responseBody = await response.json();
+
+                if (!response.ok || !responseBody.success) {
+                    throw new Error(`API request failed: ${JSON.stringify(responseBody)}`);
+                }
+
+                console.log("Success:", responseBody);
+                return responseBody;
+
+            } catch (error) {
+                console.error("Error during API request:", error.message);
+                if (error.response) {
+                    console.error("Response data:", error.response.data);
+                }
+                throw error;
+            }
+        }
+
+        exportCustomer(customerIds) {
+            const body = {
+                customer_ids: customerIds
+            };
+            console.log("Export Customer Body:", body);
+            return this.sendRequest("POST", "data", "customers/export-one", body);
+        }
+    }
+
+    async function unmergeCustomer() {
+        clearResults();
+        showLoader(true);
+
+        const exponea = new Exponea('http://localhost:3000/exponea');
+        const customerEmail = document.getElementById('customer-email').value;
+        const eventMappingInput = document.getElementById('event-mapping').value;
+
+        const exportRequestProps = {
+            "customer_id": { "email": customerEmail }
+        };
+
+        let eventIdentificationMapping;
+        try {
+            eventIdentificationMapping = JSON.parse(eventMappingInput);
+        } catch (error) {
+            alert("Invalid JSON format in Event Identification Mapping.");
+            showLoader(false);
+            return;
+        }
+
+        try {
+            const customer = await exponea.exportCustomer(exportRequestProps.customer_id);
+            console.log('Total events:', { email: exportRequestProps.customer_id.email, count: customer.events.length });
+            console.log('Customer:', customer);
+            displayCustomerDetails(customer.ids);
+
+            const eventTypes = [...new Set(customer.events.map(event => event.type))];
+            createTabs(eventTypes, 'original', customer.events);
+
+            let totalOriginalEvents = 0;
+            let totalFilteredEvents = 0;
+            const filteredEvents = [];
+
+            const filteredEventTypes = [];
+            eventTypes.forEach(eventType => {
+                const originalEvents = customer.events.filter(event => event.type === eventType);
+                totalOriginalEvents += originalEvents.length;
+                displayEventsInTable(eventType, originalEvents, 'original');
+
+                const filtered = filterEventsByCustomerID(originalEvents, customerEmail, eventIdentificationMapping);
+                totalFilteredEvents += filtered.length;
+                filteredEvents.push(...filtered);
+                if (filtered.length > 0) {
+                    filteredEventTypes.push(eventType);
+                }
+                displayEventsInTable(eventType, filtered, 'filtered');
+            });
+
+            document.getElementById('original-events-count').textContent = `(${totalOriginalEvents})`;
+            document.getElementById('filtered-events-count').textContent = `(${totalFilteredEvents})`;
+
+            if (filteredEventTypes.length > 0) {
+                createTabs(filteredEventTypes, 'filtered', customer.events, true);
+                document.getElementById(`original-${eventTypes[0]}`).style.display = 'block';
+                document.getElementById(`tab-original-${eventTypes[0]}`).classList.add('active');
+            }
+
+            outputFilteredJSON(customerEmail, filteredEvents);
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        } finally {
+            showLoader(false);
+        }
+    }
+
+    function clearResults() {
+        document.getElementById('customer-details').innerHTML = '';
+        document.getElementById('original-tab-container').innerHTML = '';
+        document.getElementById('original-table-container').innerHTML = '';
+        document.getElementById('filtered-tab-container').innerHTML = '';
+        document.getElementById('filtered-table-container').innerHTML = '';
+        document.getElementById('original-events-count').textContent = '';
+        document.getElementById('filtered-events-count').textContent = '';
+        document.getElementById('download-link').style.display = 'none';
+    }
+
+    function showLoader(show) {
+        const loader = document.getElementById('loader');
+        const resultsContent = document.querySelector('.results-content');
+        if (show) {
+            loader.style.display = 'block';
+            resultsContent.style.filter = 'blur(5px)';
+        } else {
+            loader.style.display = 'none';
+            resultsContent.style.filter = 'none';
+        }
+    }
+
+    function displayCustomerDetails(customerIds) {
+        const customerDetailsDiv = document.getElementById('customer-details');
+        customerDetailsDiv.innerHTML = `<strong>Customer Details:</strong> <pre>${JSON.stringify(customerIds, null, 2)}</pre>`;
+    }
+
+    function createTabs(eventTypes, prefix, events, filtered = false) {
+        const tabContainer = document.getElementById(`${prefix}-tab-container`);
+        tabContainer.innerHTML = '';
+
+        eventTypes.forEach(eventType => {
+            const eventCount = filtered
+                ? filterEventsByCustomerID(events.filter(event => event.type === eventType), document.getElementById('customer-email').value, JSON.parse(document.getElementById('event-mapping').value)).length
+                : events.filter(event => event.type === eventType).length;
+            const tab = document.createElement('div');
+            tab.className = 'tab';
+            tab.id = `tab-${prefix}-${eventType}`;
+            tab.textContent = `${eventType} (${eventCount})`;
+            tab.onclick = () => showTab(prefix, eventType);
+            tabContainer.appendChild(tab);
+        });
+    }
+
+    function showTab(prefix, eventType) {
+        const tabs = document.querySelectorAll(`.${prefix}-tab`);
+        const tables = document.querySelectorAll(`.${prefix}-table-container`);
+
+        tabs.forEach(tab => tab.classList.remove('active'));
+        tables.forEach(table => table.style.display = 'none');
+
+        document.getElementById(`tab-${prefix}-${eventType}`).classList.add('active');
+        document.getElementById(`${prefix}-${eventType}`).style.display = 'block';
+    }
+
+    function displayEventsInTable(eventType, events, prefix) {
+        const container = document.createElement('div');
+        container.className = `${prefix}-table-container table-container`;
+        container.id = `${prefix}-${eventType}`;
+
+        const table = document.createElement('table');
+
+        if (events.length > 0) {
+            const headers = Object.keys(flattenProperties(events[0]));
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+
+            events.forEach(event => {
+                const row = document.createElement('tr');
+                const flatEvent = flattenProperties(event);
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.textContent = flatEvent[header] || '';
+                    row.appendChild(td);
+                });
+                table.appendChild(row);
+            });
+        }
+
+        container.appendChild(table);
+        document.getElementById(`${prefix}-table-container`).appendChild(container);
+    }
+
+    function flattenProperties(event) {
+        const flat = {};
+        for (const key in event) {
+            if (event.hasOwnProperty(key)) {
+                if (typeof event[key] === 'object' && event[key] !== null) {
+                    for (const subKey in event[key]) {
+                        if (event[key].hasOwnProperty(subKey)) {
+                            flat[`${key}.${subKey}`] = event[key][subKey];
+                        }
+                    }
+                } else {
+                    flat[key] = event[key];
+                }
+            }
+        }
+        return flat;
+    }
+
+    function filterEventsByCustomerID(events, customerEmail, eventIdentificationMapping) {
+        return events.filter(event => isEventAssociatedWithCustomer(event, customerEmail, eventIdentificationMapping));
+    }
+
+    function isEventAssociatedWithCustomer(event, customerEmail, eventIdentificationMapping) {
+        const eventType = event.type;
+        const emailFields = eventIdentificationMapping[eventType];
+        if (!emailFields) {
+            return false; // Event type not found in mapping
+        }
+        for (const field of emailFields) {
+            if (event.properties && event.properties.hasOwnProperty(field)) {
+                if (event.properties[field] === customerEmail) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function outputFilteredJSON(customerEmail, filteredEvents) {
+        const filteredData = {
+            ids: {
+                email: customerEmail
+            },
+            events: filteredEvents
+        };
+
+        const timestamp = new Date().toISOString().replace(/[:.-]/g, '');
+        const safeEmail = customerEmail.replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `${safeEmail}_${timestamp}.json`;
+
+        const jsonStr = JSON.stringify(filteredData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const downloadLink = document.getElementById('download-link');
+        downloadLink.href = url;
+        downloadLink.download = filename;
+        downloadLink.style.display = 'block';
+        downloadLink.textContent = 'Download Filtered JSON';
+    }
+</script>
+</body>
+</html>
