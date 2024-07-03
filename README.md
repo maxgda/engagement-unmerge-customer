@@ -16,11 +16,20 @@ This project provides a web interface to unmerge customer events from Exponea
 - Node.js (v14 or higher)
 - NPM (Node Package Manager)
 
+### .env file
+
+```
+API_URL=<your_api_url>
+PROJECT_TOKEN=<your_project_token>
+PUBLIC_KEY=<your_public_key>
+PRIVATE_KEY=<your_private_key>
+```
+
 ## Installation
 
 1. Install the dependencies:
     ```bash
-    npm install express axios
+    npm install express axios dotenv
     ```
 
 ## Configuration
