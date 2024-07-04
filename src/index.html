@@ -15,7 +15,11 @@
         <div class="card">
             <h2><i class="fas fa-cogs"></i> Configuration</h2>
             <div>
-                <label for="customer-email">Customer Email:</label>
+                <label for="customer-id-key">Customer ID Key:</label>
+                <input type="text" id="customer-id-key" value="email">
+            </div>
+            <div>
+                <label for="customer-email">Customer ID Value:</label>
                 <input type="text" id="customer-email" value="sample@example.com">
             </div>
             <div>
@@ -29,16 +33,16 @@
 }
                 </textarea>
             </div>
-            <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter Customer Events</button>
-            <button class="anonymise"><i class="fas fa-user-secret"></i> Anonymise</button>
-            <button><i class="fas fa-chart-line"></i> Track</button>
+            <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter</button>
+            <button class="anonymise" onclick="showAnonymiseModal()"><i class="fas fa-user-secret"></i> Anonymise</button>
+            <button><i class="fas fa-chart-line"></i> Track from Storage</button>
         </div>
         <div class="card storage-card">
             <h2><i class="fas fa-folder"></i> Stored Filtered Emails</h2>
             <table id="storage-table">
                 <thead>
                 <tr>
-                    <th>Email</th>
+                    <th>Customer ID</th>
                     <th>Events</th>
                     <th>Download</th>
                     <th>Action</th>
@@ -54,7 +58,7 @@
         <div class="results-content">
             <h2><i class="fas fa-list"></i> Results</h2>
             <div id="customer-details" class="customer-details"></div>
-            <h2>Original Events <span id="original-events-count"></span></h2>
+            <h2>Customer Events <span id="original-events-count"></span></h2>
             <div id="original-tab-container" class="tab-container"></div>
             <div id="original-table-container"></div>
             <h2>Filtered Events <span id="filtered-events-count"></span></h2>
@@ -64,6 +68,17 @@
         </div>
     </div>
 </div>
+
+<!-- Anonymise Confirmation Modal -->
+<div id="anonymise-modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAnonymiseModal()">&times;</span>
+        <p id="anonymise-modal-text">Are you sure you want to anonymise this customer?</p>
+        <button onclick="anonymiseCustomer()">Yes, Anonymise</button>
+        <button onclick="closeAnonymiseModal()">Cancel</button>
+    </div>
+</div>
+
 <script>
     class Exponea {
         constructor(apiUrl) {
@@ -107,6 +122,14 @@
             console.log("Export Customer Body:", body);
             return this.sendRequest("POST", "data", "customers/export-one", body);
         }
+
+        anonymiseCustomer(customerIds) {
+            const body = {
+                customer_ids: customerIds
+            };
+            console.log("Anonymise Customer Body:", body);
+            return this.sendRequest("POST", "data", "customers/anonymize", body);
+        }
     }
 
     async function unmergeCustomer() {
@@ -115,10 +138,11 @@
 
         const exponea = new Exponea('http://localhost:3000/exponea');
         const customerEmail = document.getElementById('customer-email').value;
+        const customerIdKey = document.getElementById('customer-id-key').value;
         const eventMappingInput = document.getElementById('event-mapping').value;
 
         const exportRequestProps = {
-            "customer_id": { "email": customerEmail }
+            "customer_id": { [customerIdKey]: customerEmail }
         };
 
         let eventIdentificationMapping;
@@ -132,7 +156,7 @@
 
         try {
             const customer = await exponea.exportCustomer(exportRequestProps.customer_id);
-            console.log('Total events:', { email: exportRequestProps.customer_id.email, count: customer.events.length });
+            console.log('Total events:', { id: exportRequestProps.customer_id[customerIdKey], count: customer.events.length });
             console.log('Customer:', customer);
             displayCustomerDetails(customer.ids);
 
@@ -149,7 +173,7 @@
                 totalOriginalEvents += originalEvents.length;
                 displayEventsInTable(eventType, originalEvents, 'original');
 
-                const filtered = filterEventsByCustomerID(originalEvents, customerEmail, eventIdentificationMapping);
+                const filtered = filterEventsByCustomerID(originalEvents, customerIdKey, customerEmail, eventIdentificationMapping);
                 totalFilteredEvents += filtered.length;
                 filteredEvents.push(...filtered);
                 if (filtered.length > 0) {
@@ -167,12 +191,39 @@
                 document.getElementById(`tab-original-${eventTypes[0]}`).classList.add('active');
             }
 
-            outputFilteredJSON(customerEmail, filteredEvents);
+            outputFilteredJSON(customerIdKey, customerEmail, filteredEvents);
         } catch (error) {
             alert(`Error: ${error.message}`);
         } finally {
             showLoader(false);
         }
+    }
+
+    async function anonymiseCustomer() {
+        const exponea = new Exponea('http://localhost:3000/exponea');
+        const customerEmail = document.getElementById('customer-email').value;
+        const customerIdKey = document.getElementById('customer-id-key').value;
+        const anonymiseRequestProps = {
+            [customerIdKey]: customerEmail
+        };
+
+        try {
+            await exponea.anonymiseCustomer(anonymiseRequestProps);
+            alert('Customer anonymised successfully.');
+            closeAnonymiseModal();
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    function showAnonymiseModal() {
+        const customerEmail = document.getElementById('customer-email').value;
+        document.getElementById('anonymise-modal-text').textContent = `Are you sure you want to anonymise ${customerEmail}?`;
+        document.getElementById('anonymise-modal').style.display = 'block';
+    }
+
+    function closeAnonymiseModal() {
+        document.getElementById('anonymise-modal').style.display = 'none';
     }
 
     function clearResults() {
@@ -209,7 +260,7 @@
 
         eventTypes.forEach(eventType => {
             const eventCount = filtered
-                ? filterEventsByCustomerID(events.filter(event => event.type === eventType), document.getElementById('customer-email').value, JSON.parse(document.getElementById('event-mapping').value)).length
+                ? filterEventsByCustomerID(events.filter(event => event.type === eventType), document.getElementById('customer-id-key').value, document.getElementById('customer-email').value, JSON.parse(document.getElementById('event-mapping').value)).length
                 : events.filter(event => event.type === eventType).length;
             const tab = document.createElement('div');
             tab.className = `tab ${prefix}-tab`;
@@ -282,19 +333,19 @@
         return flat;
     }
 
-    function filterEventsByCustomerID(events, customerEmail, eventIdentificationMapping) {
-        return events.filter(event => isEventAssociatedWithCustomer(event, customerEmail, eventIdentificationMapping));
+    function filterEventsByCustomerID(events, customerIdKey, customerIdValue, eventIdentificationMapping) {
+        return events.filter(event => isEventAssociatedWithCustomer(event, customerIdKey, customerIdValue, eventIdentificationMapping));
     }
 
-    function isEventAssociatedWithCustomer(event, customerEmail, eventIdentificationMapping) {
+    function isEventAssociatedWithCustomer(event, customerIdKey, customerIdValue, eventIdentificationMapping) {
         const eventType = event.type;
-        const emailFields = eventIdentificationMapping[eventType];
-        if (!emailFields) {
+        const idFields = eventIdentificationMapping[eventType];
+        if (!idFields) {
             return false; // Event type not found in mapping
         }
-        for (const field of emailFields) {
+        for (const field of idFields) {
             if (event.properties && event.properties.hasOwnProperty(field)) {
-                if (event.properties[field] === customerEmail) {
+                if (event.properties[field] === customerIdValue) {
                     return true;
                 }
             }
@@ -302,17 +353,17 @@
         return false;
     }
 
-    function outputFilteredJSON(customerEmail, filteredEvents) {
+    function outputFilteredJSON(customerIdKey, customerIdValue, filteredEvents) {
         const filteredData = {
             ids: {
-                email: customerEmail
+                [customerIdKey]: customerIdValue
             },
             events: filteredEvents
         };
 
         const timestamp = new Date().toISOString().replace(/[:.-]/g, '');
-        const safeEmail = customerEmail.replace(/[^a-zA-Z0-9]/g, '_');
-        const filename = `${safeEmail}_${timestamp}.json`;
+        const safeId = customerIdValue.replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `${safeId}_${timestamp}.json`;
 
         const jsonStr = JSON.stringify(filteredData, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -336,7 +387,7 @@
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.endsWith('.json')) {
-                const email = key.split('_')[0].replace(/_/g, '@');
+                const idKeyValue = key.split('_')[0].replace(/_/g, '@');
                 const eventCount = JSON.parse(localStorage.getItem(key)).events.length;
 
                 const downloadLink = document.createElement('a');
@@ -345,7 +396,7 @@
                 downloadLink.textContent = key;
 
                 const viewButton = document.createElement('button');
-                viewButton.textContent = 'View';
+                viewButton.innerHTML = '<i class="far fa-eye"></i>';
                 viewButton.onclick = () => {
                     const data = JSON.parse(localStorage.getItem(key));
                     loadStoredData(data);
@@ -359,8 +410,8 @@
                 };
 
                 const row = document.createElement('tr');
-                const emailCell = document.createElement('td');
-                emailCell.textContent = email;
+                const idKeyCell = document.createElement('td');
+                idKeyCell.textContent = idKeyValue;
                 const eventCountCell = document.createElement('td');
                 eventCountCell.textContent = eventCount;
                 const downloadCell = document.createElement('td');
@@ -369,7 +420,7 @@
                 actionCell.appendChild(viewButton);
                 actionCell.appendChild(removeButton);
 
-                row.appendChild(emailCell);
+                row.appendChild(idKeyCell);
                 row.appendChild(eventCountCell);
                 row.appendChild(downloadCell);
                 row.appendChild(actionCell);
@@ -381,14 +432,16 @@
     async function loadStoredData(data) {
         clearResults();
 
-        const customerEmail = data.ids.email;
-        document.getElementById('customer-email').value = customerEmail;
+        const customerIdKey = Object.keys(data.ids)[0];
+        const customerIdValue = data.ids[customerIdKey];
+        document.getElementById('customer-id-key').value = customerIdKey;
+        document.getElementById('customer-email').value = customerIdValue;
 
         displayCustomerDetails(data.ids);
 
         const exponea = new Exponea('http://localhost:3000/exponea');
         const exportRequestProps = {
-            "customer_id": { "email": customerEmail }
+            "customer_id": { [customerIdKey]: customerIdValue }
         };
 
         try {

@@ -87,6 +87,11 @@ class Exponea {
         const body = { customer_ids: customerIds };
         return this.sendRequest('post', 'data', 'customers/export-one', body);
     }
+
+    anonymiseCustomer(customerIds) {
+        const body = { customer_ids: customerIds };
+        return this.sendRequest('post', 'data', 'customers/anonymize', body);
+    }
 }
 
 const exponea = new Exponea(apiUrl, projectToken, auth);
