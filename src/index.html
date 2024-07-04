@@ -34,8 +34,9 @@
                 </textarea>
             </div>
             <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter</button>
-            <button class="anonymise" onclick="showAnonymiseModal()"><i class="fas fa-user-secret"></i> Anonymise</button>
-            <button><i class="fas fa-chart-line"></i> Track from Storage</button>
+            <button class="anonymise" onclick="showAnonymiseModal()"><i class="fas fa-user-secret"></i> Anonymise
+            </button>
+            <button><i class="fas fa-chart-line"></i> Track all from Storage</button>
         </div>
         <div class="card storage-card">
             <h2><i class="fas fa-folder"></i> Stored Filtered Emails</h2>
@@ -56,7 +57,10 @@
     <div class="card results-card">
         <div id="loader" class="loader" style="display: none;"></div>
         <div class="results-content">
-            <h2><i class="fas fa-list"></i> Results</h2>
+            <div class="results-header">
+                <h2><i class="fas fa-list"></i> Results</h2>
+                <button onclick="saveFilteredJSON()"><i class="fas fa-save"></i> Add Filtered Events to Storage</button>
+            </div>
             <div id="customer-details" class="customer-details"></div>
             <h2>Customer Events <span id="original-events-count"></span></h2>
             <div id="original-tab-container" class="tab-container"></div>
@@ -142,7 +146,7 @@
         const eventMappingInput = document.getElementById('event-mapping').value;
 
         const exportRequestProps = {
-            "customer_id": { [customerIdKey]: customerEmail }
+            "customer_id": {[customerIdKey]: customerEmail}
         };
 
         let eventIdentificationMapping;
@@ -156,7 +160,10 @@
 
         try {
             const customer = await exponea.exportCustomer(exportRequestProps.customer_id);
-            console.log('Total events:', { id: exportRequestProps.customer_id[customerIdKey], count: customer.events.length });
+            console.log('Total events:', {
+                id: exportRequestProps.customer_id[customerIdKey],
+                count: customer.events.length
+            });
             console.log('Customer:', customer);
             displayCustomerDetails(customer.ids);
 
@@ -366,18 +373,28 @@
         const filename = `${safeId}_${timestamp}.json`;
 
         const jsonStr = JSON.stringify(filteredData, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const blob = new Blob([jsonStr], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
-
-        // Save to local storage
-        localStorage.setItem(filename, jsonStr);
-        populateStorageTable();
 
         const downloadLink = document.getElementById('download-link');
         downloadLink.href = url;
         downloadLink.download = filename;
         downloadLink.style.display = 'block';
         downloadLink.textContent = 'Download Filtered JSON';
+
+        // Save filtered data for saving to storage
+        window.filteredDataForStorage = filteredData;
+        window.filteredFilename = filename;
+    }
+
+    function saveFilteredJSON() {
+        if (window.filteredDataForStorage && window.filteredFilename) {
+            const jsonStr = JSON.stringify(window.filteredDataForStorage, null, 2);
+            localStorage.setItem(window.filteredFilename, jsonStr);
+            populateStorageTable();
+        } else {
+            alert('No filtered data available to save.');
+        }
     }
 
     function populateStorageTable() {
@@ -391,7 +408,7 @@
                 const eventCount = JSON.parse(localStorage.getItem(key)).events.length;
 
                 const downloadLink = document.createElement('a');
-                downloadLink.href = URL.createObjectURL(new Blob([localStorage.getItem(key)], { type: 'application/json' }));
+                downloadLink.href = URL.createObjectURL(new Blob([localStorage.getItem(key)], {type: 'application/json'}));
                 downloadLink.download = key;
                 downloadLink.textContent = key;
 
@@ -441,7 +458,7 @@
 
         const exponea = new Exponea('http://localhost:3000/exponea');
         const exportRequestProps = {
-            "customer_id": { [customerIdKey]: customerIdValue }
+            "customer_id": {[customerIdKey]: customerIdValue}
         };
 
         try {

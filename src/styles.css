@@ -192,3 +192,9 @@ th {
     text-decoration: none;
     cursor: pointer;
 }
+
+.results-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5vw;
+}
