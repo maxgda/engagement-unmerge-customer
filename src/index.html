@@ -36,7 +36,7 @@
             <button onclick="unmergeCustomer()"><i class="fas fa-file-export"></i> Export & Filter</button>
             <button class="anonymise" onclick="showAnonymiseModal()"><i class="fas fa-user-secret"></i> Anonymise
             </button>
-            <button><i class="fas fa-chart-line"></i> Track all from Storage</button>
+            <button onclick="showTrackModal()"><i class="fas fa-chart-line"></i> Track all from Storage</button>
         </div>
         <div class="card storage-card">
             <h2><i class="fas fa-folder"></i> Stored Filtered Emails</h2>
@@ -80,6 +80,17 @@
         <p id="anonymise-modal-text">Are you sure you want to anonymise this customer?</p>
         <button onclick="anonymiseCustomer()">Yes, Anonymise</button>
         <button onclick="closeAnonymiseModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Track Confirmation Modal -->
+<div id="track-modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeTrackModal()">&times;</span>
+        <h2>Track all from Storage</h2>
+        <div id="track-modal-content" style="max-height: 70vh; overflow-y: auto;"></div>
+        <button onclick="trackAllFromStorage()">Yes, Track All</button>
+        <button onclick="closeTrackModal()">Cancel</button>
     </div>
 </div>
 
@@ -133,6 +144,14 @@
             };
             console.log("Anonymise Customer Body:", body);
             return this.sendRequest("POST", "data", "customers/anonymize", body);
+        }
+
+        trackAllFromStorage(commands) {
+            const body = {
+                commands: commands
+            };
+            console.log("Track All From Storage Body:", body);
+            return this.sendRequest("POST", "track", "batch", body);
         }
     }
 
@@ -231,6 +250,26 @@
 
     function closeAnonymiseModal() {
         document.getElementById('anonymise-modal').style.display = 'none';
+    }
+
+    function showTrackModal() {
+        const storageData = getStorageData();
+        const commands = buildCommands(storageData);
+
+        let modalContent = '<h3>Customers to be tracked:</h3><ul>';
+        commands.forEach((command, index) => {
+            modalContent += `<li><strong>Customer ${index + 1}:</strong> ${JSON.stringify(command.data.customer_ids)}</li>`;
+        });
+        modalContent += '</ul>';
+        modalContent += '<h3>JSON Payload Preview:</h3>';
+        modalContent += `<pre>${JSON.stringify({ commands: commands }, null, 2)}</pre>`;
+
+        document.getElementById('track-modal-content').innerHTML = modalContent;
+        document.getElementById('track-modal').style.display = 'block';
+    }
+
+    function closeTrackModal() {
+        document.getElementById('track-modal').style.display = 'none';
     }
 
     function clearResults() {
@@ -492,6 +531,75 @@
                 document.getElementById(`original-${eventTypes[0]}`).style.display = 'block';
                 document.getElementById(`tab-original-${eventTypes[0]}`).classList.add('active');
             }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    function getStorageData() {
+        const storageData = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.endsWith('.json')) {
+                const data = JSON.parse(localStorage.getItem(key));
+                storageData.push(data);
+            }
+        }
+        return storageData;
+    }
+
+    function buildCommands(storageData) {
+        const commands = storageData.map((data, index) => {
+            const customerIdKey = Object.keys(data.ids)[0];
+            const customerIdValue = data.ids[customerIdKey];
+
+            const command = {
+                name: "customers/events",
+                command_id: `command_${index + 1}`,
+                data: {
+                    customer_ids: {
+                        [customerIdKey]: customerIdValue
+                    },
+                    properties: {}
+                },
+                events: []
+            };
+
+            if (customerIdKey === "email") {
+                command.data.properties.email = customerIdValue;
+            }
+
+            data.events.forEach(event => {
+                const eventCopy = {
+                    event_type: event.type,
+                    timestamp: event.timestamp,
+                    properties: {
+                        ...event.properties
+                    }
+                };
+
+                if (customerIdKey === "email") {
+                    eventCopy.properties.email = customerIdValue;
+                }
+
+                command.events.push(eventCopy);
+            });
+
+            return command;
+        });
+
+        return commands;
+    }
+
+    async function trackAllFromStorage() {
+        const exponea = new Exponea('http://localhost:3000/exponea');
+        const storageData = getStorageData();
+        const commands = buildCommands(storageData);
+
+        try {
+            const response = await exponea.trackAllFromStorage(commands);
+            alert('Tracking operation completed successfully.');
+            closeTrackModal();
         } catch (error) {
             alert(`Error: ${error.message}`);
         }

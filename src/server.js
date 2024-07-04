@@ -1,4 +1,4 @@
-require('dotenv').config({path: '../.env'});
+require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -91,6 +91,11 @@ class Exponea {
     anonymiseCustomer(customerIds) {
         const body = { customer_ids: customerIds };
         return this.sendRequest('post', 'data', 'customers/anonymize', body);
+    }
+
+    trackAllFromStorage(commands) {
+        const body = { commands: commands };
+        return this.sendRequest('post', 'track', 'batch', body);
     }
 }
 
