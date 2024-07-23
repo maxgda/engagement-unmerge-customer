@@ -590,7 +590,7 @@
         let modalContent = '<h3>Customers to be tracked:</h3><ul>';
         commands.forEach((command, index) => {
             if (command.name === "customers") {
-                modalContent += `<li><strong>Customer ${index + 1}:</strong> ${JSON.stringify(command.data.customer_ids)}</li>`;
+                modalContent += `<li> ${JSON.stringify(command.data.customer_ids)}</li>`;
             }
         });
         modalContent += '</ul>';
