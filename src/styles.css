@@ -198,8 +198,3 @@ th {
     align-items: center;
     gap: 0.5vw;
 }
-
-.scrollable-content {
-    max-height: 50vh;
-    overflow-y: auto;
-}

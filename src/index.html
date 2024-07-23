@@ -252,22 +252,6 @@
         document.getElementById('anonymise-modal').style.display = 'none';
     }
 
-    function showTrackModal() {
-        const storageData = getStorageData();
-        const commands = buildCommands(storageData);
-
-        let modalContent = '<h3>Customers to be tracked:</h3><ul>';
-        commands.forEach((command, index) => {
-            modalContent += `<li><strong>Customer ${index + 1}:</strong> ${JSON.stringify(command.data.customer_ids)}</li>`;
-        });
-        modalContent += '</ul>';
-        modalContent += '<h3>JSON Payload Preview:</h3>';
-        modalContent += `<pre>${JSON.stringify({ commands: commands }, null, 2)}</pre>`;
-
-        document.getElementById('track-modal-content').innerHTML = modalContent;
-        document.getElementById('track-modal').style.display = 'block';
-    }
-
     function closeTrackModal() {
         document.getElementById('track-modal').style.display = 'none';
     }
@@ -549,47 +533,75 @@
     }
 
     function buildCommands(storageData) {
-        const commands = storageData.map((data, index) => {
+        const commands = storageData.flatMap((data, index) => {
             const customerIdKey = Object.keys(data.ids)[0];
             const customerIdValue = data.ids[customerIdKey];
 
-            const command = {
-                name: "customers/events",
-                command_id: `command_${index + 1}`,
+            const customerCommands = [];
+
+            const customerCommand = {
+                name: "customers",
                 data: {
                     customer_ids: {
                         [customerIdKey]: customerIdValue
                     },
                     properties: {}
-                },
-                events: []
+                }
             };
 
             if (customerIdKey === "email") {
-                command.data.properties.email = customerIdValue;
+                customerCommand.data.properties.email = customerIdValue;
             }
 
+            customerCommands.push(customerCommand);
+
             data.events.forEach(event => {
-                const eventCopy = {
-                    event_type: event.type,
-                    timestamp: event.timestamp,
-                    properties: {
-                        ...event.properties
+                const eventCommand = {
+                    name: "customers/events",
+                    data: {
+                        customer_ids: {
+                            [customerIdKey]: customerIdValue
+                        },
+                        event_type: event.type,
+                        timestamp: event.timestamp,
+                        properties: {
+                            ...event.properties
+                        }
                     }
                 };
 
                 if (customerIdKey === "email") {
-                    eventCopy.properties.email = customerIdValue;
+                    eventCommand.data.properties.email = customerIdValue;
                 }
 
-                command.events.push(eventCopy);
+                customerCommands.push(eventCommand);
             });
 
-            return command;
+            return customerCommands;
         });
 
         return commands;
     }
+
+    function showTrackModal() {
+        const storageData = getStorageData();
+        const commands = buildCommands(storageData);
+
+        let modalContent = '<h3>Customers to be tracked:</h3><ul>';
+        commands.forEach((command, index) => {
+            if (command.name === "customers") {
+                modalContent += `<li><strong>Customer ${index + 1}:</strong> ${JSON.stringify(command.data.customer_ids)}</li>`;
+            }
+        });
+        modalContent += '</ul>';
+        modalContent += '<h3>JSON Payload Preview:</h3>';
+        modalContent += `<pre>${JSON.stringify(commands, null, 2)}</pre>`;
+
+        document.getElementById('track-modal-content').innerHTML = modalContent;
+        document.getElementById('track-modal').style.display = 'block';
+    }
+
+
 
     async function trackAllFromStorage() {
         const exponea = new Exponea('http://localhost:3000/exponea');
